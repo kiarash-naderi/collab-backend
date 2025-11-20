@@ -1,5 +1,6 @@
-import { prisma } from '../core/db/prisma';
+
 import type { AuditLog, AuditAction } from '@prisma/client';
+import { prisma } from '../core/db/prisma.js';
 
 interface AuditInput {
   userId: string;

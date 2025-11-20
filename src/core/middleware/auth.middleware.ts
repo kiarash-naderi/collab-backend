@@ -1,21 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../../modules/auth/services/jwt.service';
+import { verifyAccessToken } from '../../modules/auth/services/jwt.service.js';
+import type { JwtPayload } from '../../modules/auth/types/auth.types.js';
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-    }
+export const authenticateFromCookie = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const token = req.cookies?.access_token as string | undefined;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied' });
   }
-}
-
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
 
   try {
-    const payload = verifyAccessToken(auth.split(' ')[1]);
-    req.user = payload;
+    const payload = verifyAccessToken(token);
+    req.user = payload as JwtPayload;
     next();
   } catch {
     res.status(401).json({ error: 'Invalid token' });

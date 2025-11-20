@@ -1,7 +1,8 @@
-import { prisma } from '../../../core/db/prisma';
+
 import bcrypt from 'bcryptjs';
-import { generateTokens } from './jwt.service';
 import { PermissionRole } from '@prisma/client';
+import { prisma } from '../../../core/db/prisma.js';
+import { generateTokens } from './jwt.service.js';
 
 export interface LoginResult {
   accessToken: string;
