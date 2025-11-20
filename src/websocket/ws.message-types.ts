@@ -1,3 +1,4 @@
+
 import type { WebSocket } from 'ws';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
@@ -13,10 +14,12 @@ export interface JwtPayload {
 }
 
 export interface WSAuthClient extends WebSocket {
+  userColor: string;
+  userName: string;
   userId: string;
   documentId: string;
   isAlive: boolean;
-  server?: import('ws').WebSocketServer; 
+  server?: import('ws').WebSocketServer;
 }
 
 export interface YDocInstance {
@@ -25,12 +28,14 @@ export interface YDocInstance {
 }
 
 export type IncomingWSMessage =
-  | { type: 'update'; data: number[] }
-  | { type: 'awareness'; data: number[] }
-  | { type: 'query-sync'; stateVector: number[] };
+  | { type: 'update'; data: number[] }                   
+  | { type: 'awareness'; data: number[] }                
+  | { type: 'query-sync'; stateVector: number[] }         
+  | { type: 'sync-request'; stateVector: number[] };     
 
 export type OutgoingWSMessage =
-  | { type: 'init'; update: number[]; stateVector: number[] }
-  | { type: 'update'; data: number[] }
-  | { type: 'awareness-init'; data: number[] }
-  | { type: 'awareness'; data: number[] };
+  | { type: 'init'; update: number[]; stateVector: number[] }                    
+  | { type: 'update'; data: number[] }                                           
+  | { type: 'awareness-init'; data: number[] }                                   
+  | { type: 'awareness'; data: number[] }                                        
+  | { type: 'sync-response'; update: number[]; stateVector?: number[] };        

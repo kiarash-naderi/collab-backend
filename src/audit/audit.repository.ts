@@ -1,25 +1,20 @@
-
-import type { AuditLog, AuditAction } from '@prisma/client';
 import { prisma } from '../core/db/prisma.js';
+import type { AuditAction } from '@prisma/client';
 
-interface AuditInput {
+interface AuditPayload {
   userId: string;
   documentId?: string;
   action: AuditAction;
-  metadata?: any;
-  ipAddress?: string;
-  userAgent?: string;
+  metadata?: Record<string, any>;
 }
 
-export const logAudit = async (input: AuditInput): Promise<AuditLog> => {
-  return prisma.auditLog.create({
+export const logAudit = async (payload: AuditPayload) => {
+  await prisma.auditLog.create({
     data: {
-      userId: input.userId,
-      documentId: input.documentId || null,
-      action: input.action,
-      metadata: input.metadata || null,
-      ipAddress: input.ipAddress || null,
-      userAgent: input.userAgent || null,
+      userId: payload.userId,
+      documentId: payload.documentId || null,
+      action: payload.action,
+      metadata: payload.metadata !== undefined ? payload.metadata : undefined,
     },
   });
 };
