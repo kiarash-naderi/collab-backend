@@ -1,21 +1,37 @@
 import { prisma } from '../../../core/db/prisma';
-import type { DocumentOp } from '@prisma/client';
+import type { Operation } from '@prisma/client';
 
-export const saveOp = async (docId: string, update: Buffer): Promise<DocumentOp> => {
-  return prisma.documentOp.create({
+export const saveOperation = async (
+  docId: string,
+  userId: string,
+  update: Uint8Array,
+  stateVector: Uint8Array
+): Promise<Operation> => {
+  return prisma.operation.create({
     data: {
-      docId,
-      updateBinary: new Uint8Array(update), 
+      documentId: docId,
+      userId,
+      update: Buffer.from(update),
+      stateVector: Buffer.from(stateVector),
     },
   });
 };
 
+export const getOperationsAfter = async (
+  docId: string,
+  afterStateVector?: Uint8Array
+): Promise<Operation[]> => {
+  if (!afterStateVector) {
+    return prisma.operation.findMany({
+      where: { documentId: docId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
 
-export const getOpsSince = async (docId: string, since: Date): Promise<DocumentOp[]> => {
-  return prisma.documentOp.findMany({
+  return prisma.operation.findMany({
     where: {
-      docId,
-      createdAt: { gt: since },
+      documentId: docId,
+      createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     },
     orderBy: { createdAt: 'asc' },
   });

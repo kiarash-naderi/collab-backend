@@ -1,21 +1,24 @@
-
 import { prisma } from '../core/db/prisma';
-import { Prisma } from '@prisma/client';
-import type { AuditLog } from '@prisma/client';
+import type { AuditLog, AuditAction } from '@prisma/client';
 
-export const logAudit = async (
-  log: Omit<AuditLog, 'id' | 'timestamp'>
-): Promise<AuditLog> => {
+interface AuditInput {
+  userId: string;
+  documentId?: string;
+  action: AuditAction;
+  metadata?: any;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export const logAudit = async (input: AuditInput): Promise<AuditLog> => {
   return prisma.auditLog.create({
     data: {
-      ...log,
-      payload:
-        log.payload === null ? Prisma.DbNull : log.payload, 
+      userId: input.userId,
+      documentId: input.documentId || null,
+      action: input.action,
+      metadata: input.metadata || null,
+      ipAddress: input.ipAddress || null,
+      userAgent: input.userAgent || null,
     },
   });
-};
-
-
-export const getAuditLogsForDoc = async (docId: string): Promise<AuditLog[]> => {
-  return prisma.auditLog.findMany({ where: { docId } });
 };

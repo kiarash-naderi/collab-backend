@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,68 +6,143 @@ datasource db {
   provider = "postgresql"
 }
 
-model Document {
-  id          String               @id @default(uuid())
-  title       String
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  versions    DocumentVersion[]
-  ops         DocumentOp[]
+  permissions  DocumentPermission[]
+  auditLogs    AuditLog[]
+  refreshTokens RefreshToken[]
+  
+  documents    Document[]  @relation("UserDocuments")  
+
+  @@index([email])
+}
+
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([token])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  title       String
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User     @relation("UserDocuments", fields: [ownerId], references: [id])
   permissions DocumentPermission[]
+  operations  Operation[]
+  versions    DocumentVersion[]
+  assets      BinaryAsset[]
   auditLogs   AuditLog[]
 
-  @@map("documents")
-}
-
-model DocumentVersion {
-  id              String   @id @default(uuid())
-  docId           String   @map("doc_id")
-  snapshotBinary  Bytes?   @map("snapshot_binary")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  document        Document @relation(fields: [docId], references: [id], onDelete: Cascade)
-
-  @@map("document_versions")
-}
-
-model DocumentOp {
-  id           String   @id @default(uuid())
-  docId        String   @map("doc_id")
-  updateBinary Bytes?   @map("update_binary")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  document     Document @relation(fields: [docId], references: [id], onDelete: Cascade)
-
-  @@map("document_ops")
+  @@index([ownerId])
 }
 
 model DocumentPermission {
-  docId  String   @map("doc_id")
-  userId String   @map("user_id")
-  role   Role
+  id         String         @id @default(uuid())
+  documentId String
+  userId     String
+  role       PermissionRole
+  createdAt  DateTime       @default(now())
 
-  document Document @relation(fields: [docId], references: [id], onDelete: Cascade)
+  document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([docId, userId])
-  @@map("document_permissions")
+  @@unique([documentId, userId])
+  @@index([documentId])
 }
 
-model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  docId     String?  @map("doc_id")
-  action    String
-  payload   Json?
-  timestamp DateTime @default(now())
-
-  document  Document? @relation(fields: [docId], references: [id], onDelete: Cascade)
-
-  @@map("audit_logs")
-}
-
-enum Role {
+enum PermissionRole {
   OWNER
   EDITOR
   VIEWER
+}
+
+model Operation {
+  id          String   @id @default(uuid())
+  documentId  String
+  userId      String
+  update      Bytes
+  stateVector Bytes
+  createdAt   DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+}
+
+model DocumentVersion {
+  id          String   @id @default(uuid())
+  documentId  String
+  snapshot    Bytes
+  stateVector Bytes
+  createdAt   DateTime @default(now())
+  createdBy   String?
+  label       String?
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+}
+
+model BinaryAsset {
+  id          String   @id @default(uuid())
+  documentId  String
+  filename    String
+  mimeType    String
+  size        Int
+  storagePath String
+  uploadedBy  String
+  uploadedAt  DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  documentId String?
+  userId     String
+  action     AuditAction
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  document   Document?   @relation(fields: [documentId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+
+  @@index([documentId, createdAt])
+}
+
+enum AuditAction {
+  DOCUMENT_CREATE
+  DOCUMENT_UPDATE
+  DOCUMENT_DELETE
+  DOCUMENT_OPEN
+  PERMISSION_GRANT
+  PERMISSION_REVOKE
+  VERSION_CREATE
+  VERSION_REVERT
+  USER_LOGIN
+  USER_LOGOUT
+  ASSET_UPLOAD
 }
