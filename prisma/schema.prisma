@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Document {
+  id          String               @id @default(uuid())
+  title       String
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  versions    DocumentVersion[]
+  ops         DocumentOp[]
+  permissions DocumentPermission[]
+  auditLogs   AuditLog[]
+
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id              String   @id @default(uuid())
+  docId           String   @map("doc_id")
+  snapshotBinary  Bytes?   @map("snapshot_binary")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  document        Document @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  @@map("document_versions")
+}
+
+model DocumentOp {
+  id           String   @id @default(uuid())
+  docId        String   @map("doc_id")
+  updateBinary Bytes?   @map("update_binary")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  document     Document @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  @@map("document_ops")
+}
+
+model DocumentPermission {
+  docId  String   @map("doc_id")
+  userId String   @map("user_id")
+  role   Role
+
+  document Document @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  @@id([docId, userId])
+  @@map("document_permissions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  docId     String?  @map("doc_id")
+  action    String
+  payload   Json?
+  timestamp DateTime @default(now())
+
+  document  Document? @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+}
