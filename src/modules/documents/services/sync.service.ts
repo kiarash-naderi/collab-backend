@@ -1,89 +1,68 @@
 import * as Y from "yjs";
 import { prisma } from "../../../core/db/prisma.js";
-import { yjsToPrismaBytes } from "../../../utils/yjs.js";
 
-const documentYDocMap = new Map<string, Y.Doc>();
+const snapshotTimers = new Map<string, NodeJS.Timeout>();
 
-const SNAPSHOT_INTERVAL_MS = 30_000;
-const SNAPSHOT_AFTER_OPS = 100;
+export const persistUpdate = async (
+  documentId: string,
+  userId: string,
+  update: Uint8Array,
+  stateVector: Uint8Array
+): Promise<void> => {
+  await prisma.operation.create({
+    data: {
+      documentId,
+      userId,
+      update: Buffer.from(update),
+      stateVector: Buffer.from(stateVector),
+    },
+  });
+};
 
-const pendingSnapshots = new Map<string, NodeJS.Timeout>();
-const opCounters = new Map<string, number>();
+export const applyMissingOperations = async (
+  ydoc: Y.Doc,
+  documentId: string,
+  fromDate?: Date | null
+): Promise<void> => {
+  const operations = await prisma.operation.findMany({
+    where: {
+      documentId,
+      createdAt: { gt: fromDate ?? new Date(0) },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { update: true },
+  });
 
-export class SyncService {
-  static registerYDoc(documentId: string, ydoc: Y.Doc) {
-    documentYDocMap.set(documentId, ydoc);
+  for (const op of operations) {
+    Y.applyUpdate(ydoc, new Uint8Array(op.update));
   }
+};
 
-  static async persistUpdate(
-    documentId: string,
-    userId: string,
-    update: Uint8Array
-  ): Promise<void> {
-    await prisma.operation.create({
+export const registerYDoc = (documentId: string, ydoc: Y.Doc) => {
+  const existingTimer = snapshotTimers.get(documentId);
+  if (existingTimer) clearTimeout(existingTimer);
+
+  const timer = setTimeout(async () => {
+    const snapshot = Y.encodeStateAsUpdate(ydoc);
+    const stateVector = Y.encodeStateVector(ydoc);
+
+    await prisma.documentVersion.create({
       data: {
         documentId,
-        userId,
-        update: yjsToPrismaBytes(update),
-        stateVector: yjsToPrismaBytes(Y.encodeStateVectorFromUpdate(update)),
+        snapshot: Buffer.from(snapshot),
+        stateVector: Buffer.from(stateVector),
       },
     });
 
-    const count = (opCounters.get(documentId) || 0) + 1;
-    opCounters.set(documentId, count);
-
-    if (count >= SNAPSHOT_AFTER_OPS) {
-      this.scheduleSnapshot(documentId);
-      opCounters.set(documentId, 0); 
-    }
-  }
-
-  static scheduleSnapshot(documentId: string): void {
-    if (pendingSnapshots.has(documentId)) return;
-
-    const timer = setTimeout(async () => {
-      const ydoc = documentYDocMap.get(documentId);
-      if (!ydoc) {
-        pendingSnapshots.delete(documentId);
-        return;
-      }
-
-      const snapshot = Y.encodeStateAsUpdate(ydoc);
-      const stateVector = Y.encodeStateVector(ydoc);
-
-      await prisma.documentVersion.create({
-        data: {
-          documentId,
-          snapshot: yjsToPrismaBytes(snapshot),
-          stateVector: yjsToPrismaBytes(stateVector),
-          label: `Auto-snapshot (${new Date().toISOString().split('T')[0]})`,
-        },
-      });
-
-      console.log(`Snapshot saved for document ${documentId}`);
-      pendingSnapshots.delete(documentId);
-    }, SNAPSHOT_INTERVAL_MS);
-
-    pendingSnapshots.set(documentId, timer);
-  }
-
-  static async applyMissingOperations(
-    ydoc: Y.Doc,
-    documentId: string,
-    fromDate?: Date
-  ): Promise<void> {
-    const where: any = { documentId };
-    if (fromDate) where.createdAt = { gt: fromDate };
-
-    const ops = await prisma.operation.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
+    await prisma.operation.deleteMany({
+      where: { 
+        documentId, 
+        createdAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } 
+      },
     });
 
-    for (const op of ops) {
-      Y.applyUpdate(ydoc, new Uint8Array(op.update));
-    }
-
-    console.log(`Applied ${ops.length} missing operations for document ${documentId}`);
-  }
-}
+    snapshotTimers.delete(documentId);
+  }, 5 * 60 * 1000); 
+  
+  snapshotTimers.set(documentId, timer);
+};

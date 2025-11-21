@@ -1,4 +1,5 @@
-import { prisma } from '../../../core/db/prisma';
+import { prisma } from "../../../core/db/prisma.js";
+
 
 
 export const createDocument = async (title: string, ownerId: string) => {

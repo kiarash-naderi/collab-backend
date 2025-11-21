@@ -1,0 +1,64 @@
+time="2025-11-21T13:04:45+03:30" level=warning msg="/home/kiarash/collab-backend/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#0 building with "default" instance using docker driver
+
+#1 [app internal] load build definition from Dockerfile
+#1 transferring dockerfile: 852B done
+#1 DONE 0.0s
+
+#2 [app internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 5.2s
+
+#3 [app internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [app builder  1/10] FROM docker.io/library/node:20-alpine@sha256:6178e78b972f79c335df281f4b7674a2d85071aae2af020ffa39f0a770265435
+#4 DONE 0.0s
+
+#5 [app builder  2/10] WORKDIR /app
+#5 CACHED
+
+#6 [app internal] load build context
+#6 transferring context: 4.66kB 0.1s done
+#6 DONE 0.1s
+
+#7 [app builder  3/10] COPY package*.json ./
+#7 DONE 0.0s
+
+#8 [app builder  4/10] COPY tsconfig.json ./
+#8 DONE 0.1s
+
+#9 [app builder  5/10] RUN npm ci
+#9 43.86 
+#9 43.86 added 336 packages, and audited 337 packages in 44s
+#9 43.86 
+#9 43.86 57 packages are looking for funding
+#9 43.86   run `npm fund` for details
+#9 43.95 
+#9 43.95 3 vulnerabilities (2 moderate, 1 high)
+#9 43.95 
+#9 43.95 To address all issues (including breaking changes), run:
+#9 43.95   npm audit fix --force
+#9 43.95 
+#9 43.95 Run `npm audit` for details.
+#9 43.96 npm notice
+#9 43.96 npm notice New major version of npm available! 10.8.2 -> 11.6.3
+#9 43.96 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.3
+#9 43.96 npm notice To update run: npm install -g npm@11.6.3
+#9 43.96 npm notice
+#9 DONE 44.2s
+
+#10 [app builder  6/10] COPY prisma ./prisma
+#10 DONE 0.1s
+
+#11 [app builder  7/10] COPY src ./src
+#11 DONE 0.1s
+
+#12 [app builder  8/10] RUN npx prisma generate
+#12 6.485 Error: request to https://binaries.prisma.sh/all_commits/0c19ccc313cf9911a90d99d2ac2eb0280c76c513/linux-musl-openssl-3.0.x/schema-engine.gz.sha256 failed, reason: 
+#12 ERROR: process "/bin/sh -c npx prisma generate" did not complete successfully: exit code: 1
+------
+ > [app builder  8/10] RUN npx prisma generate:
+6.485 Error: request to https://binaries.prisma.sh/all_commits/0c19ccc313cf9911a90d99d2ac2eb0280c76c513/linux-musl-openssl-3.0.x/schema-engine.gz.sha256 failed, reason: 
+------
+failed to solve: process "/bin/sh -c npx prisma generate" did not complete successfully: exit code: 1

@@ -1,4 +1,4 @@
-import { prisma } from '../../../core/db/prisma';
+import { prisma } from "../../../core/db/prisma.js";
 import type { Operation } from '@prisma/client';
 
 export const saveOperation = async (

@@ -1,23 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../../modules/auth/services/jwt.service.js';
-import type { JwtPayload } from '../../modules/auth/types/auth.types.js';
 
-export const authenticateFromCookie = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const token = req.cookies?.access_token as string | undefined;
+export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies?.access_token || req.headers.authorization?.split(' ')?.[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Access denied' });
+    return res.status(401).json({ error: 'Access token required' });
   }
 
   try {
     const payload = verifyAccessToken(token);
-    req.user = payload as JwtPayload;
+    req.user = payload; 
     next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };

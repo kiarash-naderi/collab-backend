@@ -5,49 +5,14 @@ import {
   applyAwarenessUpdate,
 } from "y-protocols/awareness";
 import { prisma } from "../core/db/prisma.js";
-import { SyncService } from "../modules/documents/services/sync.service.js";
+import { persistUpdate } from "../modules/documents/services/sync.service.js";
+import { getOrCreateYDoc, applyUpdate as applyCrdtUpdate } from "../modules/documents/services/crdt.service.js";
 import {
   IncomingWSMessage,
   OutgoingWSMessage,
   WSAuthClient,
   YDocInstance,
 } from "./ws.message-types.js";
-
-export const documentStore = new Map<string, YDocInstance>();
-
-const getOrCreateDocument = async (
-  documentId: string
-): Promise<YDocInstance> => {
-  const cached = documentStore.get(documentId);
-  if (cached) return cached;
-
-  const ydoc = new Y.Doc();
-  const awareness = new Awareness(ydoc);
-
-  const latestSnapshot = await prisma.documentVersion.findFirst({
-    where: { documentId },
-    orderBy: { createdAt: "desc" },
-    select: { snapshot: true, createdAt: true },
-  });
-
-  if (latestSnapshot?.snapshot) {
-    Y.applyUpdate(ydoc, new Uint8Array(latestSnapshot.snapshot));
-    console.log(`Snapshot loaded for document ${documentId}`);
-  }
-
-  await SyncService.applyMissingOperations(
-    ydoc,
-    documentId,
-    latestSnapshot?.createdAt
-  );
-
-  const instance: YDocInstance = { doc: ydoc, awareness };
-  documentStore.set(documentId, instance);
-
-  SyncService.registerYDoc(documentId, ydoc);
-
-  return instance;
-};
 
 const broadcastMessage = (
   sender: WSAuthClient,
@@ -79,7 +44,7 @@ export const handleWebSocketConnection = async (
   ws.userId = userId;
   ws.documentId = documentId;
 
-  const { doc, awareness } = await getOrCreateDocument(documentId);
+  const { doc, awareness } = await getOrCreateYDoc(documentId);
 
   const initialUpdate = Y.encodeStateAsUpdate(doc);
   const stateVector = Y.encodeStateVector(doc);
@@ -109,9 +74,11 @@ export const handleWebSocketConnection = async (
 
       if (msg.type === "update" && Array.isArray(msg.data)) {
         const update = new Uint8Array(msg.data);
-        Y.applyUpdate(doc, update);
+        applyCrdtUpdate(doc, update);
 
-        await SyncService.persistUpdate(documentId, userId, update);
+        const stateVectorAfterUpdate = Y.encodeStateVector(doc);
+
+        await persistUpdate(documentId, userId, update, stateVectorAfterUpdate);
 
         broadcastMessage(ws, { type: "update", data: msg.data }, documentId);
       }

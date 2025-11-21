@@ -1,89 +1,79 @@
-
-import { prisma } from "../../../core/db/prisma.js";
 import * as Y from "yjs";
-import { SyncService } from "./sync.service.js";
-import { documentStore } from "../../../websocket/ws.handler.js"; // این خط مهمه!
-import type { WSAuthClient } from "../../../websocket/ws.message-types.js";
+import { prisma } from "../../../core/db/prisma.js";
+import { getOrCreateYDoc } from "./crdt.service.js";
+import type { WSAuthClient, OutgoingWSMessage } from "../../../websocket/ws.message-types.js";
 import { Awareness } from "y-protocols/awareness.js";
 
-export const listVersions = async (documentId: string) => {
-  return await prisma.documentVersion.findMany({
-    where: { documentId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      createdAt: true,
-      label: true,
-      createdBy: true,
-    },
-  });
+const broadcastMessage = (
+  sender: WSAuthClient,
+  message: OutgoingWSMessage,
+  documentId: string
+): void => {
+  const wss = sender.server;
+  if (!wss) return;
+
+  for (const client of wss.clients) {
+    const c = client as WSAuthClient;
+    if (c.readyState !== c.OPEN || c === sender || c.documentId !== documentId)
+      continue;
+
+    try {
+      c.send(JSON.stringify(message));
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
+  }
 };
 
 export const revertToVersion = async (
   documentId: string,
   versionId: string,
   userId: string
-) => {
+): Promise<void> => {
+  const perm = await prisma.documentPermission.findUnique({ 
+    where: { documentId_userId: { documentId, userId } } 
+  });
+  if (!perm || (perm.role !== 'OWNER' && perm.role !== 'EDITOR')) {
+    throw new Error('Permission denied');
+  }
+
   const version = await prisma.documentVersion.findUnique({
     where: { id: versionId },
-    select: { snapshot: true, label: true },
+    select: { snapshot: true },
   });
 
-  if (!version?.snapshot) {
-    throw new Error("Version not found or snapshot is missing");
-  }
+  if (!version) throw new Error('Version not found');
 
-  const snapshotBytes = new Uint8Array(version.snapshot);
+  const { doc, awareness } = await getOrCreateYDoc(documentId);
 
-  // 2. پیدا کردن Y.Doc فعلی در مموری
-  const instance = documentStore.get(documentId);
-  if (!instance) {
-    throw new Error("Document is not currently loaded");
-  }
-
-  const { doc: ydoc, awareness } = instance;
-
-  Y.applyUpdate(ydoc, snapshotBytes);
+  Y.applyUpdate(doc, new Uint8Array(version.snapshot));
 
   awareness.destroy();
-  const newAwareness = new Awareness(ydoc);
-  instance.awareness = newAwareness;
+  const newAwareness = new Awareness(doc);
 
-  SyncService.registerYDoc(documentId, ydoc);
+  const newSnapshot = Y.encodeStateAsUpdate(doc);
+  const newStateVector = Y.encodeStateVector(doc);
 
-  const currentStateVector = Y.encodeStateVector(ydoc);
   await prisma.documentVersion.create({
     data: {
       documentId,
-      snapshot: version.snapshot,
-      stateVector: Buffer.from(currentStateVector),
-      label: `Reverted by user ${userId} to "${version.label || "previous version"}"`,
-      createdBy: userId,
+      snapshot: Buffer.from(newSnapshot),
+      stateVector: Buffer.from(newStateVector),
     },
   });
 
-  SyncService.scheduleSnapshot(documentId);
+  const fullUpdate = Y.encodeStateAsUpdate(doc);
+  broadcastMessage(
+    { server: (globalThis as any).wss } as WSAuthClient, 
+    { type: "update", data: Array.from(fullUpdate) }, 
+    documentId
+  );
+};
 
-  const fullUpdate = Y.encodeStateAsUpdate(ydoc);
-  const wss = (globalThis as any).wss as import("ws").WebSocketServer | undefined;
-
-  if (wss) {
-    for (const client of wss.clients) {
-      const c = client as WSAuthClient;
-      if (c.readyState === c.OPEN && c.documentId === documentId) {
-        c.send(
-          JSON.stringify({
-            type: "update" as const,
-            data: Array.from(fullUpdate),
-          })
-        );
-      }
-    }
-  }
-
-  return {
-    success: true,
-    message: "Document reverted successfully and synced to all users",
-    revertedTo: versionId,
-  };
+export const getVersions = async (documentId: string): Promise<any[]> => {
+  return prisma.documentVersion.findMany({
+    where: { documentId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, createdAt: true },
+  });
 };
