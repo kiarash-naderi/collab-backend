@@ -6,13 +6,25 @@ import {
 } from "y-protocols/awareness";
 import { prisma } from "../core/db/prisma.js";
 import { persistUpdate } from "../modules/documents/services/sync.service.js";
-import { getOrCreateYDoc, applyUpdate as applyCrdtUpdate } from "../modules/documents/services/crdt.service.js";
+import {
+  getOrCreateYDoc,
+  applyUpdate as applyCrdtUpdate,
+  documentStore,
+} from "../modules/documents/services/crdt.service.js";
 import {
   IncomingWSMessage,
   OutgoingWSMessage,
   WSAuthClient,
   YDocInstance,
 } from "./ws.message-types.js";
+
+import {
+  yjsUpdatesTotal,
+  yjsUpdatesFailed,
+  persistenceLatency,
+  activeConnections,
+  loadedDocuments,
+} from "../observability/metrics.service.js";
 
 const broadcastMessage = (
   sender: WSAuthClient,
@@ -46,6 +58,9 @@ export const handleWebSocketConnection = async (
 
   const { doc, awareness } = await getOrCreateYDoc(documentId);
 
+  activeConnections.inc({ document_id: documentId });
+  loadedDocuments.set(documentStore.size);
+
   const initialUpdate = Y.encodeStateAsUpdate(doc);
   const stateVector = Y.encodeStateVector(doc);
   ws.send(
@@ -74,22 +89,57 @@ export const handleWebSocketConnection = async (
 
       if (msg.type === "update" && Array.isArray(msg.data)) {
         const update = new Uint8Array(msg.data);
-        applyCrdtUpdate(doc, update);
 
-        const stateVectorAfterUpdate = Y.encodeStateVector(doc);
+        try {
+          applyCrdtUpdate(doc, update);
 
-        await persistUpdate(documentId, userId, update, stateVectorAfterUpdate);
+          const stateVectorAfterUpdate = Y.encodeStateVector(doc);
 
-        broadcastMessage(ws, { type: "update", data: msg.data }, documentId);
-      }
+          const endTimer = persistenceLatency.startTimer();
+          await persistUpdate(
+            documentId,
+            userId,
+            update,
+            stateVectorAfterUpdate
+          );
+          endTimer();
 
-      if (msg.type === "awareness" && Array.isArray(msg.data)) {
+          yjsUpdatesTotal.inc({ document_id: documentId });
+
+          broadcastMessage(ws, { type: "update", data: msg.data }, documentId);
+
+          console.log(
+            `Update persisted & broadcasted for doc ${documentId} by user ${userId}`
+          );
+        } catch (persistError) {
+          console.error("PERSISTENCE FAILED — Update rejected:", persistError);
+
+          yjsUpdatesFailed.inc({ document_id: documentId });
+
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              code: "PERSISTENCE_FAILED",
+              message: "تغییرات ذخیره نشد. لطفاً صفحه را رفرش کنید.",
+            })
+          );
+
+          const fullUpdate = Y.encodeStateAsUpdate(doc);
+          ws.send(
+            JSON.stringify({
+              type: "force-sync",
+              update: Array.from(fullUpdate),
+            })
+          );
+        }
+      } else if (msg.type === "awareness" && Array.isArray(msg.data)) {
         const update = new Uint8Array(msg.data);
         applyAwarenessUpdate(awareness, update, ws);
         broadcastMessage(ws, { type: "awareness", data: msg.data }, documentId);
-      }
-
-      if (msg.type === "sync-request" && Array.isArray(msg.stateVector)) {
+      } else if (
+        msg.type === "sync-request" &&
+        Array.isArray(msg.stateVector)
+      ) {
         const clientStateVector = new Uint8Array(msg.stateVector);
         const diff = Y.encodeStateAsUpdate(doc, clientStateVector);
 
@@ -107,11 +157,8 @@ export const handleWebSocketConnection = async (
     }
   });
 
-  ws.on("pong", () => {
-    ws.isAlive = true;
-  });
-
   ws.on("close", () => {
-    awareness.setLocalState(null);
+    activeConnections.dec({ document_id: documentId });
+    loadedDocuments.set(documentStore.size);
   });
 };

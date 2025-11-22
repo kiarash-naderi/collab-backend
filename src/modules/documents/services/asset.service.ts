@@ -23,7 +23,7 @@ export const uploadAsset = async (
     'Content-Type': file.mimetype,
   });
 
-  const url = await minioClient.presignedGetObject(BUCKET_NAME, key, 7 * 24 * 60 * 60); // 7 روز
+  const url = await minioClient.presignedGetObject(BUCKET_NAME, key, 7 * 24 * 60 * 60); 
 
   const asset = await createAsset({
     id: fileId,

@@ -1,8 +1,13 @@
 import * as Y from "yjs";
 import { prisma } from "../../../core/db/prisma.js";
 import { getOrCreateYDoc } from "./crdt.service.js";
-import type { WSAuthClient, OutgoingWSMessage } from "../../../websocket/ws.message-types.js";
+import type {
+  WSAuthClient,
+  OutgoingWSMessage,
+} from "../../../websocket/ws.message-types.js";
 import { Awareness } from "y-protocols/awareness.js";
+import { logAudit } from "../../../audit/audit.repository.js";
+import { AuditAction } from "@prisma/client";
 
 const broadcastMessage = (
   sender: WSAuthClient,
@@ -30,11 +35,11 @@ export const revertToVersion = async (
   versionId: string,
   userId: string
 ): Promise<void> => {
-  const perm = await prisma.documentPermission.findUnique({ 
-    where: { documentId_userId: { documentId, userId } } 
+  const perm = await prisma.documentPermission.findUnique({
+    where: { documentId_userId: { documentId, userId } },
   });
-  if (!perm || (perm.role !== 'OWNER' && perm.role !== 'EDITOR')) {
-    throw new Error('Permission denied');
+  if (!perm || (perm.role !== "OWNER" && perm.role !== "EDITOR")) {
+    throw new Error("Permission denied");
   }
 
   const version = await prisma.documentVersion.findUnique({
@@ -42,7 +47,7 @@ export const revertToVersion = async (
     select: { snapshot: true },
   });
 
-  if (!version) throw new Error('Version not found');
+  if (!version) throw new Error("Version not found");
 
   const { doc, awareness } = await getOrCreateYDoc(documentId);
 
@@ -62,10 +67,17 @@ export const revertToVersion = async (
     },
   });
 
+  await logAudit({
+    userId,
+    documentId,
+    action: AuditAction.VERSION_REVERT,
+    metadata: { revertedFrom: versionId },
+  });
+
   const fullUpdate = Y.encodeStateAsUpdate(doc);
   broadcastMessage(
-    { server: (globalThis as any).wss } as WSAuthClient, 
-    { type: "update", data: Array.from(fullUpdate) }, 
+    { server: (globalThis as any).wss } as WSAuthClient,
+    { type: "update", data: Array.from(fullUpdate) },
     documentId
   );
 };

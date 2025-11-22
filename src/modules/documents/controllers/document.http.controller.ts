@@ -3,6 +3,8 @@ import { getVersions, revertToVersion } from "../services/version.service.js";
 import { prisma } from "../../../core/db/prisma.js";
 import * as Y from "yjs";
 import { registerYDoc } from "../services/sync.service.js";
+import { logAudit } from "../../../audit/audit.repository.js";
+import { AuditAction } from "@prisma/client";
 
 export const createDocument = async (req: Request, res: Response) => {
   const { title = "Untitled Document" } = req.body;
@@ -24,7 +26,7 @@ export const createDocument = async (req: Request, res: Response) => {
       data: {
         documentId: document.id,
         userId,
-        role: 'OWNER',
+        role: "OWNER",
       },
     });
 
@@ -43,6 +45,22 @@ export const createDocument = async (req: Request, res: Response) => {
     });
 
     registerYDoc(document.id, ydoc);
+    
+    await logAudit({
+      userId,
+      documentId: document.id,
+      action: AuditAction.DOCUMENT_CREATE,
+      metadata: { title },
+      request: req,
+    });
+
+    await logAudit({
+      userId,
+      documentId: document.id,
+      action: AuditAction.VERSION_CREATE,
+      metadata: { label: "Initial version" },
+      request: req,
+    });
 
     res.status(201).json({
       success: true,

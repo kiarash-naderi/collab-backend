@@ -34,7 +34,9 @@ export const setupWebSocketServer = (server: HttpServer) => {
 
       wss.handleUpgrade(request, socket, head, (ws) => {
         const authenticatedWs = ws as WSAuthClient;
-        authenticatedWs.server = wss;  
+        authenticatedWs.server = wss;
+        authenticatedWs.upgradeReq = request; 
+        
         wss.emit("connection", authenticatedWs, request);
         handleWebSocketConnection(authenticatedWs, documentId, payload.userId);
       });

@@ -1,8 +1,8 @@
-
 import type { WebSocket } from 'ws';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import type { PermissionRole } from '@prisma/client';
+import type { IncomingMessage } from 'http'; // ← این خط اضافه شد
 
 export interface JwtPayload {
   userId: string;
@@ -20,6 +20,7 @@ export interface WSAuthClient extends WebSocket {
   documentId: string;
   isAlive: boolean;
   server?: import('ws').WebSocketServer;
+  upgradeReq?: IncomingMessage; 
 }
 
 export interface YDocInstance {
@@ -28,14 +29,14 @@ export interface YDocInstance {
 }
 
 export type IncomingWSMessage =
-  | { type: 'update'; data: number[] }                   
-  | { type: 'awareness'; data: number[] }                
-  | { type: 'query-sync'; stateVector: number[] }         
-  | { type: 'sync-request'; stateVector: number[] };     
+  | { type: 'update'; data: number[] }
+  | { type: 'awareness'; data: number[] }
+  | { type: 'query-sync'; stateVector: number[] }
+  | { type: 'sync-request'; stateVector: number[] };
 
 export type OutgoingWSMessage =
-  | { type: 'init'; update: number[]; stateVector: number[] }                    
-  | { type: 'update'; data: number[] }                                           
-  | { type: 'awareness-init'; data: number[] }                                   
-  | { type: 'awareness'; data: number[] }                                        
-  | { type: 'sync-response'; update: number[]; stateVector?: number[] };        
+  | { type: 'init'; update: number[]; stateVector: number[] }
+  | { type: 'update'; data: number[] }
+  | { type: 'awareness-init'; data: number[] }
+  | { type: 'awareness'; data: number[] }
+  | { type: 'sync-response'; update: number[]; stateVector?: number[] };
