@@ -3,9 +3,6 @@
 
 ## Real-time collaborative document editing with CRDT (Y.js) + WebSocket.
 
----
-
-
 
 ## Quick Start
 
